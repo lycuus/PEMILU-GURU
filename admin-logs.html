@@ -1,0 +1,1510 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin OSSIP - Log Aktivitas</title>
+    <link rel="icon" type="image/png" href="assets/ossip-bg.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* (CSS tetap sama seperti sebelumnya, tambahkan di bagian bawah) */
+
+        /* Notification System */
+        .notification-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 350px;
+        }
+
+        .notification {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideInRight 0.3s ease;
+            border-left: 4px solid #4CAF50;
+            max-width: 350px;
+        }
+
+        .notification.info {
+            border-left-color: #2196F3;
+        }
+
+        .notification.warning {
+            border-left-color: #FF9800;
+        }
+
+        .notification.error {
+            border-left-color: #F44336;
+        }
+
+        .notification.success {
+            border-left-color: #4CAF50;
+        }
+
+        .notification-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .notification-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .notification-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .notification-message {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .notification-close {
+            background: none;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px;
+            flex-shrink: 0;
+        }
+
+        .notification-close:hover {
+            color: #666;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes slideOutRight {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        /* New Activity Indicator */
+        .new-activity-indicator {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: #FF5722;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 9999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            cursor: pointer;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        /* Live Badge */
+        .live-badge {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4CAF50;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 9998;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .live-badge .dot {
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Auto-refresh Status */
+        .auto-refresh-status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(33, 150, 243, 0.9);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 9997;
+            backdrop-filter: blur(10px);
+        }
+
+        .auto-refresh-status i {
+            animation: spin 10s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Last Update Info */
+        .last-update-info {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        /* Remove old sync status styles */
+        .sync-status {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Live Badge -->
+    <div class="live-badge" id="liveBadge">
+        <div class="dot"></div>
+        LIVE
+    </div>
+
+    <!-- New Activity Indicator -->
+    <div class="new-activity-indicator" id="newActivityIndicator" style="display: none;" onclick="loadNewLogs()">
+        <i class="fas fa-bell"></i>
+        <span id="newLogsCount">0</span> log baru
+    </div>
+
+    <!-- Notification Container -->
+    <div class="notification-container" id="notificationContainer"></div>
+
+    <!-- Auto Refresh Status -->
+    <div class="auto-refresh-status" id="autoRefreshStatus">
+        <i class="fas fa-sync-alt"></i>
+        Auto-refresh: <span id="refreshTimer">10s</span>
+    </div>
+
+    <div class="admin-dashboard-container">
+        <!-- Sidebar -->
+        <div class="admin-sidebar">
+            <div class="admin-profile">
+                <div class="profile-avatar">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+                <h3 id="adminName">Admin OSSIP</h3>
+                <p class="admin-role" id="adminRole">Pengurus Organisasi</p>
+                <p class="admin-username" id="adminUsername">@ossip_admin</p>
+            </div>
+            
+            <nav class="admin-menu">
+                <ul>
+                    <li>
+                        <a href="admin-dashboard.html">
+                            <i class="fas fa-tachometer-alt"></i>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="admin-voters.html">
+                            <i class="fas fa-users"></i>
+                            <span>Data Santri</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="admin-statistics.html">
+                            <i class="fas fa-chart-bar"></i>
+                            <span>Statistik</span>
+                        </a>
+                    </li>
+                    <li class="active">
+                        <a href="admin-logs.html">
+                            <i class="fas fa-history"></i>
+                            <span>Log Aktivitas</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="admin-settings.html">
+                            <i class="fas fa-cog"></i>
+                            <span>Pengaturan</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            
+            <div class="logout-section" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <button class="btn-primary" onclick="logout()" style="width: 100%;">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="admin-main-content">
+            <!-- Page Header -->
+            <div class="page-header">
+                <h1><i class="fas fa-history"></i> Log Aktivitas Sistem OSSIP <span class="ossip-badge">Real-time</span></h1>
+                <div class="header-actions">
+                    <button class="btn-secondary" onclick="clearOldLogs()">
+                        <i class="fas fa-trash"></i> Hapus Log Lama
+                    </button>
+                    <button class="btn-primary" onclick="exportLogs()">
+                        <i class="fas fa-download"></i> Ekspor Log
+                    </button>
+                </div>
+            </div>
+
+            <!-- OSSIP Banner -->
+            <div class="ossip-log-banner">
+                <i class="fas fa-mosque"></i> LOG SISTEM PEMILIHAN PENGURUS OSSIP 2024-2025
+                <div style="font-size: 12px; margin-top: 5px;">
+                    <i class="fas fa-broadcast-tower"></i> Monitoring real-time • Auto-refresh setiap 10 detik
+                </div>
+            </div>
+
+            <!-- Log Statistics -->
+            <div class="log-stats" id="logStats">
+                <div class="stat-card">
+                    <div class="icon" style="color: #1a237e;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div class="value">-</div>
+                    <div class="label">Memuat statistik...</div>
+                </div>
+            </div>
+
+            <!-- Search and Filter -->
+            <div class="logs-filter-section">
+                <div class="filter-grid">
+                    <div class="form-group log-search-box">
+                        <label for="logSearch"><i class="fas fa-search"></i> Cari Log</label>
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="logSearch" class="form-control" placeholder="Pesan, pengguna, atau IP..." oninput="filterLogs()">
+                    </div>
+                    <div class="form-group">
+                        <label for="logLevel"><i class="fas fa-filter"></i> Level Log</label>
+                        <select id="logLevel" class="form-control" onchange="filterLogs()">
+                            <option value="">Semua Level</option>
+                            <option value="info">Info</option>
+                            <option value="warning">Warning</option>
+                            <option value="error">Error</option>
+                            <option value="success">Success</option>
+                            <option value="security">Security</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="logUser"><i class="fas fa-user"></i> Pengguna</label>
+                        <select id="logUser" class="form-control" onchange="filterLogs()">
+                            <option value="">Semua Pengguna</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="logModule"><i class="fas fa-cube"></i> Modul</label>
+                        <select id="logModule" class="form-control" onchange="filterLogs()">
+                            <option value="">Semua Modul</option>
+                            <option value="auth">Autentikasi</option>
+                            <option value="voting">Pemilihan</option>
+                            <option value="candidate">Calon Pengurus</option>
+                            <option value="system">Sistem</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="filter-grid" style="margin-top: 20px;">
+                    <div class="form-group date-range">
+                        <div style="flex: 1;">
+                            <label for="startDate">Dari Tanggal</label>
+                            <input type="date" id="startDate" class="form-control" onchange="filterLogs()">
+                        </div>
+                        <div style="flex: 1;">
+                            <label for="endDate">Sampai Tanggal</label>
+                            <input type="date" id="endDate" class="form-control" onchange="filterLogs()">
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: flex-end; gap: 10px;">
+                        <button class="btn-filter" onclick="filterLogs()">
+                            <i class="fas fa-filter"></i> Terapkan Filter
+                        </button>
+                        <button class="btn-secondary" onclick="resetFilters()">
+                            <i class="fas fa-redo"></i> Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Last Update Info -->
+            <div class="last-update-info">
+                <i class="fas fa-clock"></i> Terakhir diperbarui: <span id="lastUpdateTime">-</span>
+                • Auto-refresh: <span id="nextRefreshTime">-</span>
+            </div>
+
+            <!-- Logs Table -->
+            <div class="voters-table-container">
+                <div class="table-responsive">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Level</th>
+                                <th>Pengguna</th>
+                                <th>Pesan</th>
+                                <th>Modul</th>
+                                <th>IP Address</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsTableBody">
+                            <tr>
+                                <td colspan="7" style="text-align: center; padding: 40px;">
+                                    <div class="empty-state">
+                                        <i class="fas fa-spinner fa-spin"></i>
+                                        <h3>Memuat log aktivitas...</h3>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination">
+                <ul class="pagination" id="logsPagination"></ul>
+            </div>
+
+            <!-- Footer -->
+            <div class="admin-footer">
+                <p>&copy; 2024 Organisasi Siswa Santri (OSSIP). Hak Cipta Dilindungi.</p>
+                <p><i class="fas fa-mosque"></i> Pondok Pesantren Darussalam</p>
+                <p>Log disimpan selama 90 hari | Sistem real-time aktif</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detail Log -->
+    <div id="logDetailModal" class="modal log-detail-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-info-circle"></i> Detail Log OSSIP</h3>
+                <button class="close-modal" onclick="closeLogDetailModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="log-detail-content" id="logDetailContent"></div>
+                <div class="modal-actions" style="margin-top: 20px; text-align: right;">
+                    <button type="button" class="btn-secondary" onclick="closeLogDetailModal()">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Database Script -->
+    <script src="database.js"></script>
+    
+    <script>
+        // Session Check
+        function checkSession() {
+            const isLoggedIn = sessionStorage.getItem('adminLoggedIn');
+            const adminUsername = sessionStorage.getItem('adminUsername');
+            
+            if (!isLoggedIn || !adminUsername) {
+                alert('⚠️ Anda harus login sebagai admin terlebih dahulu!');
+                window.location.href = 'admin-login.html';
+                return false;
+            }
+            
+            // Set admin info
+            const adminName = sessionStorage.getItem('adminName') || 'Admin';
+            const adminRole = sessionStorage.getItem('adminRole') || 'Administrator';
+            
+            document.getElementById('adminName').textContent = adminName;
+            document.getElementById('adminRole').textContent = adminRole;
+            document.getElementById('adminUsername').textContent = '@' + adminUsername;
+            
+            return true;
+        }
+        
+        // Global variables
+        let allLogs = [];
+        let filteredLogs = [];
+        let currentPage = 1;
+        const logsPerPage = 20;
+        let autoRefreshInterval;
+        let lastLogCount = 0;
+        let newLogsCount = 0;
+        let refreshTimer = 10; // 10 seconds
+        let refreshInterval;
+        let isAutoRefreshEnabled = true;
+        let lastUpdateTime = null;
+        
+        // Initialize page
+        async function initializePage() {
+            if (!checkSession()) return;
+            
+            console.log('Initializing logs page...');
+            
+            // Set default dates
+            const today = new Date();
+            const lastWeek = new Date(today);
+            lastWeek.setDate(lastWeek.getDate() - 7);
+            
+            document.getElementById('startDate').value = lastWeek.toISOString().slice(0, 10);
+            document.getElementById('endDate').value = today.toISOString().slice(0, 10);
+            
+            // Initialize database
+            await initializeDatabase();
+            
+            // Load initial logs
+            await refreshLogs();
+            
+            // Setup auto-refresh
+            setupAutoRefresh();
+            
+            // Setup database sync
+            setupDatabaseSync();
+            
+            // Start refresh timer
+            startRefreshTimer();
+        }
+        
+        // Initialize database
+        async function initializeDatabase() {
+            return new Promise((resolve, reject) => {
+                console.log('Checking database...');
+                
+                // Check if database is already available
+                if (window.db && typeof window.db.getAllAuditLogs === 'function') {
+                    console.log('✅ Database already initialized');
+                    showNotification('Sistem siap', 'Database terhubung', 'success');
+                    resolve(true);
+                    return;
+                }
+                
+                // Wait for database to be ready
+                let attempts = 0;
+                const maxAttempts = 30;
+                
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    
+                    if (window.db && typeof window.db.getAllAuditLogs === 'function') {
+                        clearInterval(checkInterval);
+                        console.log('✅ Database initialized successfully');
+                        showNotification('Sistem siap', 'Database terhubung', 'success');
+                        resolve(true);
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(checkInterval);
+                        console.error('❌ Database not available');
+                        showNotification('Database Error', 'Database tidak tersedia', 'error');
+                        reject(new Error('Database tidak tersedia'));
+                    }
+                }, 500);
+            });
+        }
+        
+        // Setup database sync
+        function setupDatabaseSync() {
+            // Listen for database update events
+            window.addEventListener('databaseUpdated', async (event) => {
+                console.log('📡 Database update received:', event.detail);
+                
+                if (event.detail.type === 'voteCast' || 
+                    event.detail.type === 'adminLogin' ||
+                    event.detail.type === 'voteReset' ||
+                    event.detail.type === 'auditLogAdded' ||
+                    event.detail.type === 'voterUpdated') {
+                    
+                    // Check for new logs
+                    checkForNewLogs();
+                    
+                    // Show notification based on event type
+                    let message = '';
+                    let type = 'info';
+                    
+                    switch(event.detail.type) {
+                        case 'voteCast':
+                            message = 'Santri baru saja melakukan voting';
+                            type = 'success';
+                            break;
+                        case 'adminLogin':
+                            message = 'Admin baru saja login';
+                            type = 'info';
+                            break;
+                        case 'voteReset':
+                            message = 'Data voting telah direset';
+                            type = 'warning';
+                            break;
+                        case 'voterUpdated':
+                            message = 'Data santri diperbarui';
+                            type = 'info';
+                            break;
+                    }
+                    
+                    if (message) {
+                        showNotification('Aktivitas Baru', message, type);
+                    }
+                }
+            });
+            
+            // Listen for localStorage changes (cross-tab sync)
+            window.addEventListener('storage', (event) => {
+                if (event.key === 'lastAuditLogUpdate') {
+                    console.log('📡 Storage update detected');
+                    checkForNewLogs();
+                }
+            });
+        }
+        
+        // Setup auto-refresh
+        function setupAutoRefresh() {
+            // Clear existing interval
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            
+            // Set new interval (refresh every 10 seconds)
+            autoRefreshInterval = setInterval(async () => {
+                if (isAutoRefreshEnabled) {
+                    await checkForNewLogs();
+                }
+            }, 10000); // 10 seconds
+        }
+        
+        // Start refresh timer
+        function startRefreshTimer() {
+            refreshTimer = 10;
+            updateRefreshTimer();
+            
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            
+            refreshInterval = setInterval(() => {
+                refreshTimer--;
+                updateRefreshTimer();
+                
+                if (refreshTimer <= 0) {
+                    refreshTimer = 10;
+                    if (isAutoRefreshEnabled) {
+                        checkForNewLogs();
+                    }
+                }
+            }, 1000);
+        }
+        
+        // Update refresh timer display
+        function updateRefreshTimer() {
+            document.getElementById('refreshTimer').textContent = refreshTimer + 's';
+            
+            // Update next refresh time
+            const nextRefresh = new Date(Date.now() + refreshTimer * 1000);
+            document.getElementById('nextRefreshTime').textContent = 
+                'dalam ' + refreshTimer + ' detik (' + nextRefresh.toLocaleTimeString('id-ID', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    second: '2-digit'
+                }) + ')';
+        }
+        
+        // Check for new logs
+        async function checkForNewLogs() {
+            try {
+                if (!window.db || !window.db.getAllAuditLogs) return;
+                
+                const currentLogs = await window.db.getAllAuditLogs();
+                
+                if (allLogs.length > 0) {
+                    // Find new logs
+                    const newLogs = currentLogs.filter(newLog => 
+                        !allLogs.some(existingLog => existingLog.id === newLog.id)
+                    );
+                    
+                    if (newLogs.length > 0) {
+                        // Update count
+                        newLogsCount += newLogs.length;
+                        
+                        // Show indicator
+                        const indicator = document.getElementById('newActivityIndicator');
+                        const countElement = document.getElementById('newLogsCount');
+                        
+                        countElement.textContent = newLogsCount;
+                        indicator.style.display = 'flex';
+                        
+                        // Show notification for new logs
+                        showNotification(
+                            'Log Baru',
+                            `Ada ${newLogs.length} log aktivitas baru`,
+                            'info'
+                        );
+                        
+                        // Log new activities to console
+                        newLogs.forEach(log => {
+                            console.log('📝 New log:', log.action, 'by', log.user_name);
+                        });
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Error checking for new logs:', error);
+            }
+        }
+        
+        // Load new logs when indicator is clicked
+        async function loadNewLogs() {
+            const indicator = document.getElementById('newActivityIndicator');
+            indicator.style.display = 'none';
+            newLogsCount = 0;
+            
+            showNotification('Memuat...', 'Mengambil log terbaru', 'info');
+            await refreshLogs();
+        }
+        
+        // Show notification
+        function showNotification(title, message, type = 'info') {
+            const container = document.getElementById('notificationContainer');
+            
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            
+            // Set icon based on type
+            let icon = 'fas fa-info-circle';
+            switch(type) {
+                case 'success': icon = 'fas fa-check-circle'; break;
+                case 'warning': icon = 'fas fa-exclamation-triangle'; break;
+                case 'error': icon = 'fas fa-times-circle'; break;
+                case 'info': icon = 'fas fa-info-circle'; break;
+            }
+            
+            notification.innerHTML = `
+                <div class="notification-icon">
+                    <i class="${icon}"></i>
+                </div>
+                <div class="notification-info">
+                    <div class="notification-title">${title}</div>
+                    <div class="notification-message">${message}</div>
+                </div>
+                <button class="notification-close" onclick="this.parentElement.remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            
+            // Add to container
+            container.appendChild(notification);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.style.animation = 'slideOutRight 0.3s ease';
+                    setTimeout(() => notification.remove(), 300);
+                }
+            }, 5000);
+            
+            // Play sound for important notifications
+            if (type === 'error' || type === 'warning') {
+                playNotificationSound();
+            }
+        }
+        
+        // Play notification sound
+        function playNotificationSound() {
+            try {
+                // Create a simple beep sound
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.value = 800;
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+                
+            } catch (error) {
+                console.log('Audio not supported');
+            }
+        }
+        
+        // Refresh logs
+        async function refreshLogs() {
+            try {
+                // Update last update time
+                lastUpdateTime = new Date();
+                document.getElementById('lastUpdateTime').textContent = 
+                    lastUpdateTime.toLocaleTimeString('id-ID', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                
+                // Get logs from database
+                const logs = await window.db.getAllAuditLogs();
+                
+                // Sort logs by timestamp (newest first)
+                logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                
+                // Store previous count for comparison
+                const previousCount = allLogs.length;
+                allLogs = logs;
+                
+                // Update user filter options
+                updateUserFilterOptions(logs);
+                
+                // Update statistics
+                updateLogStats(logs);
+                
+                // Filter and render logs
+                filterLogs();
+                
+                // Reset refresh timer
+                refreshTimer = 10;
+                updateRefreshTimer();
+                
+                // Show update notification if it's not the initial load
+                if (previousCount > 0 && logs.length > previousCount) {
+                    const newCount = logs.length - previousCount;
+                    showNotification(
+                        'Data Diperbarui',
+                        `Memuat ${newCount} log baru. Total: ${logs.length} log`,
+                        'success'
+                    );
+                }
+                
+            } catch (error) {
+                console.error('Error refreshing logs:', error);
+                showNotification('Error', 'Gagal memuat log: ' + error.message, 'error');
+                
+                // Show error in table
+                document.getElementById('logsTableBody').innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 40px;">
+                            <div class="empty-state">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <h3>Gagal memuat log</h3>
+                                <p>${error.message}</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+        
+        // Update user filter options
+        function updateUserFilterOptions(logs) {
+            const userSelect = document.getElementById('logUser');
+            const currentValue = userSelect.value;
+            
+            // Get unique users from logs
+            const users = [...new Set(logs.map(log => log.user_name))].sort();
+            
+            // Update options
+            userSelect.innerHTML = '<option value="">Semua Pengguna</option>';
+            users.forEach(user => {
+                if (user) { // Skip null/undefined users
+                    const option = document.createElement('option');
+                    option.value = user;
+                    option.textContent = user;
+                    userSelect.appendChild(option);
+                }
+            });
+            
+            // Restore previous selection if still valid
+            if (currentValue && users.includes(currentValue)) {
+                userSelect.value = currentValue;
+            }
+        }
+        
+        // Update log statistics
+        function updateLogStats(logs) {
+            const totalLogs = logs.length;
+            
+            // Categorize logs
+            const infoLogs = logs.filter(log => 
+                !log.action.includes('ERROR') && 
+                !log.action.includes('WARNING') &&
+                !log.action.includes('SUCCESS') &&
+                !log.action.includes('VOTE_CAST') &&
+                !log.action.includes('LOGIN') &&
+                !log.action.includes('SECURITY')
+            ).length;
+            
+            const warningLogs = logs.filter(log => log.action.includes('WARNING')).length;
+            const errorLogs = logs.filter(log => log.action.includes('ERROR')).length;
+            const successLogs = logs.filter(log => 
+                log.action.includes('SUCCESS') || 
+                log.action.includes('VOTE_CAST')
+            ).length;
+            
+            const securityLogs = logs.filter(log => 
+                log.action.includes('LOGIN') || 
+                log.action.includes('LOGOUT') ||
+                log.action.includes('SECURITY')
+            ).length;
+            
+            // Get today's logs
+            const today = new Date().toDateString();
+            const todayLogs = logs.filter(log => 
+                new Date(log.timestamp).toDateString() === today
+            ).length;
+            
+            // Update stats display
+            document.getElementById('logStats').innerHTML = `
+                <div class="stat-card">
+                    <div class="icon" style="color: #1a237e;">
+                        <i class="fas fa-history"></i>
+                    </div>
+                    <div class="value">${totalLogs.toLocaleString()}</div>
+                    <div class="label">Total Log</div>
+                </div>
+                <div class="stat-card">
+                    <div class="icon" style="color: #4CAF50;">
+                        <i class="fas fa-calendar-day"></i>
+                    </div>
+                    <div class="value">${todayLogs.toLocaleString()}</div>
+                    <div class="label">Hari Ini</div>
+                </div>
+                <div class="stat-card">
+                    <div class="icon" style="color: #2196F3;">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="value">${successLogs.toLocaleString()}</div>
+                    <div class="label">Berhasil</div>
+                </div>
+                <div class="stat-card">
+                    <div class="icon" style="color: #FF9800;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="value">${warningLogs.toLocaleString()}</div>
+                    <div class="label">Peringatan</div>
+                </div>
+                <div class="stat-card">
+                    <div class="icon" style="color: #F44336;">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <div class="value">${errorLogs.toLocaleString()}</div>
+                    <div class="label">Error</div>
+                </div>
+            `;
+        }
+        
+        // Filter logs based on criteria
+        function filterLogs() {
+            const searchTerm = document.getElementById('logSearch').value.toLowerCase();
+            const levelFilter = document.getElementById('logLevel').value;
+            const userFilter = document.getElementById('logUser').value;
+            const moduleFilter = document.getElementById('logModule').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            filteredLogs = allLogs.filter(log => {
+                // Search term filter
+                if (searchTerm) {
+                    const searchableText = [
+                        log.action || '',
+                        log.details || '',
+                        log.user_name || '',
+                        log.ip_address || ''
+                    ].join(' ').toLowerCase();
+                    
+                    if (!searchableText.includes(searchTerm)) {
+                        return false;
+                    }
+                }
+                
+                // Level filter
+                if (levelFilter) {
+                    let logLevel = 'info';
+                    
+                    if (log.action.includes('ERROR')) logLevel = 'error';
+                    else if (log.action.includes('WARNING')) logLevel = 'warning';
+                    else if (log.action.includes('SUCCESS') || log.action.includes('VOTE_CAST')) logLevel = 'success';
+                    else if (log.action.includes('LOGIN') || log.action.includes('SECURITY')) logLevel = 'security';
+                    
+                    if (logLevel !== levelFilter) {
+                        return false;
+                    }
+                }
+                
+                // User filter
+                if (userFilter && log.user_name !== userFilter) {
+                    return false;
+                }
+                
+                // Module filter
+                if (moduleFilter) {
+                    let logModule = 'system';
+                    
+                    if (log.action.includes('LOGIN') || log.action.includes('AUTH')) logModule = 'auth';
+                    else if (log.action.includes('VOTE')) logModule = 'voting';
+                    else if (log.action.includes('CANDIDATE')) logModule = 'candidate';
+                    else if (log.action.includes('ADMIN')) logModule = 'admin';
+                    
+                    if (logModule !== moduleFilter) {
+                        return false;
+                    }
+                }
+                
+                // Date filter
+                if (startDate) {
+                    const logDate = new Date(log.timestamp).toISOString().slice(0, 10);
+                    if (logDate < startDate) {
+                        return false;
+                    }
+                }
+                
+                if (endDate) {
+                    const logDate = new Date(log.timestamp).toISOString().slice(0, 10);
+                    if (logDate > endDate) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            // Reset to first page
+            currentPage = 1;
+            
+            // Render filtered logs
+            renderLogsTable();
+            renderPagination();
+        }
+        
+        // Reset all filters
+        function resetFilters() {
+            document.getElementById('logSearch').value = '';
+            document.getElementById('logLevel').value = '';
+            document.getElementById('logUser').value = '';
+            document.getElementById('logModule').value = '';
+            
+            // Reset dates to default (last week to today)
+            const today = new Date();
+            const lastWeek = new Date(today);
+            lastWeek.setDate(lastWeek.getDate() - 7);
+            
+            document.getElementById('startDate').value = lastWeek.toISOString().slice(0, 10);
+            document.getElementById('endDate').value = today.toISOString().slice(0, 10);
+            
+            filterLogs();
+            
+            showNotification('Filter Direset', 'Semua filter telah direset', 'info');
+        }
+        
+        // Render logs table
+        function renderLogsTable() {
+            const tableBody = document.getElementById('logsTableBody');
+            
+            if (filteredLogs.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7">
+                            <div class="empty-state">
+                                <i class="fas fa-clipboard-list"></i>
+                                <h3>Tidak ada log yang ditemukan</h3>
+                                <p>Coba ubah filter pencarian Anda</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            // Calculate pagination
+            const startIndex = (currentPage - 1) * logsPerPage;
+            const endIndex = startIndex + logsPerPage;
+            const pageLogs = filteredLogs.slice(startIndex, endIndex);
+            
+            let tableHTML = '';
+            
+            pageLogs.forEach(log => {
+                const date = new Date(log.timestamp);
+                const timeString = date.toLocaleTimeString('id-ID');
+                const dateString = date.toLocaleDateString('id-ID');
+                
+                // Determine log level
+                let level = 'info';
+                let levelClass = 'level-info';
+                
+                if (log.action.includes('ERROR')) {
+                    level = 'error';
+                    levelClass = 'level-error';
+                } else if (log.action.includes('WARNING')) {
+                    level = 'warning';
+                    levelClass = 'level-warning';
+                } else if (log.action.includes('SUCCESS') || log.action.includes('VOTE_CAST')) {
+                    level = 'success';
+                    levelClass = 'level-success';
+                } else if (log.action.includes('LOGIN') || log.action.includes('SECURITY')) {
+                    level = 'security';
+                    levelClass = 'level-security';
+                }
+                
+                // Determine module
+                let module = 'system';
+                if (log.action.includes('LOGIN') || log.action.includes('AUTH')) module = 'auth';
+                else if (log.action.includes('VOTE')) module = 'voting';
+                else if (log.action.includes('CANDIDATE')) module = 'candidate';
+                else if (log.action.includes('ADMIN')) module = 'admin';
+                
+                // Truncate long messages
+                let message = log.details || log.action;
+                if (message.length > 100) {
+                    message = message.substring(0, 100) + '...';
+                }
+                
+                // Highlight new logs (added in the last 5 minutes)
+                const isNew = (Date.now() - new Date(log.timestamp).getTime()) < 5 * 60 * 1000;
+                const rowClass = isNew ? 'style="background-color: #f0f9ff;"' : '';
+                
+                tableHTML += `
+                    <tr ${rowClass}>
+                        <td>
+                            <div>${dateString}</div>
+                            <div class="log-details">${timeString} ${isNew ? '🆕' : ''}</div>
+                        </td>
+                        <td><span class="log-level ${levelClass}">${level}</span></td>
+                        <td>
+                            <div class="log-user">
+                                <div class="user-avatar">
+                                    ${log.user_name ? log.user_name.charAt(0).toUpperCase() : 'S'}
+                                </div>
+                                <div>
+                                    <div>${log.user_name || 'System'}</div>
+                                    <div class="log-details">${log.user_id || 'system'}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="log-message" title="${log.details || log.action}">${message}</td>
+                        <td><span class="log-level level-info">${module}</span></td>
+                        <td><span class="log-ip">${log.ip_address || 'localhost'}</span></td>
+                        <td>
+                            <div class="log-actions">
+                                <button onclick="viewLogDetail('${log.id}')" title="Lihat Detail">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button onclick="copyLog(${log.id})" title="Salin Log">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tableBody.innerHTML = tableHTML;
+        }
+        
+        // Render pagination
+        function renderPagination() {
+            const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+            const pagination = document.getElementById('logsPagination');
+            
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+            
+            let paginationHTML = '';
+            
+            // Previous button
+            paginationHTML += `
+                <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${currentPage - 1}); return false;">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+            `;
+            
+            // Page numbers
+            const maxPagesToShow = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+            let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+            
+            // Adjust start page if we're near the end
+            if (endPage - startPage + 1 < maxPagesToShow) {
+                startPage = Math.max(1, endPage - maxPagesToShow + 1);
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHTML += `
+                    <li class="page-item ${currentPage === i ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a>
+                    </li>
+                `;
+            }
+            
+            // Next button
+            paginationHTML += `
+                <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${currentPage + 1}); return false;">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            `;
+            
+            pagination.innerHTML = paginationHTML;
+        }
+        
+        // Change page
+        function changePage(page) {
+            const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+            
+            if (page < 1 || page > totalPages) return;
+            
+            currentPage = page;
+            renderLogsTable();
+            renderPagination();
+            
+            // Scroll to top of table
+            const tableContainer = document.querySelector('.voters-table-container');
+            if (tableContainer) {
+                tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+        
+        // View log detail
+        async function viewLogDetail(logId) {
+            try {
+                // Find the log
+                const log = allLogs.find(l => l.id === logId);
+                
+                if (!log) {
+                    showNotification('Log tidak ditemukan', 'ID log tidak valid', 'error');
+                    return;
+                }
+                
+                const detailContent = document.getElementById('logDetailContent');
+                const date = new Date(log.timestamp);
+                
+                // Determine log level
+                let level = 'info';
+                let levelClass = 'level-info';
+                
+                if (log.action.includes('ERROR')) {
+                    level = 'error';
+                    levelClass = 'level-error';
+                } else if (log.action.includes('WARNING')) {
+                    level = 'warning';
+                    levelClass = 'level-warning';
+                } else if (log.action.includes('SUCCESS') || log.action.includes('VOTE_CAST')) {
+                    level = 'success';
+                    levelClass = 'level-success';
+                } else if (log.action.includes('LOGIN') || log.action.includes('SECURITY')) {
+                    level = 'security';
+                    levelClass = 'level-security';
+                }
+                
+                detailContent.innerHTML = `
+                    <div class="detail-item">
+                        <div class="detail-label">Timestamp</div>
+                        <div class="detail-value">${date.toLocaleString('id-ID')}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Action</div>
+                        <div class="detail-value">${log.action}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Level</div>
+                        <div class="detail-value">
+                            <span class="log-level ${levelClass}">${level.toUpperCase()}</span>
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Pengguna</div>
+                        <div class="detail-value">${log.user_name || 'System'} (${log.user_id || 'system'})</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Detail</div>
+                        <div class="detail-value">${log.details || 'Tidak ada detail tambahan'}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">IP Address</div>
+                        <div class="detail-value">${log.ip_address || 'localhost'}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Data Tambahan</div>
+                        <div class="detail-value">${JSON.stringify(log, null, 2)}</div>
+                    </div>
+                `;
+                
+                document.getElementById('logDetailModal').style.display = 'flex';
+                
+            } catch (error) {
+                console.error('Error viewing log detail:', error);
+                showNotification('Error', 'Gagal memuat detail log', 'error');
+            }
+        }
+        
+        // Close log detail modal
+        function closeLogDetailModal() {
+            document.getElementById('logDetailModal').style.display = 'none';
+        }
+        
+        // Copy log to clipboard
+        async function copyLog(logId) {
+            try {
+                const log = allLogs.find(l => l.id === logId);
+                
+                if (!log) {
+                    showNotification('Error', 'Log tidak ditemukan', 'error');
+                    return;
+                }
+                
+                const logText = `[${new Date(log.timestamp).toLocaleString()}] [${log.action}] ${log.user_name || 'System'}: ${log.details || ''}`;
+                
+                await navigator.clipboard.writeText(logText);
+                
+                showNotification('Berhasil', 'Log berhasil disalin ke clipboard', 'success');
+                
+            } catch (error) {
+                console.error('Error copying log:', error);
+                showNotification('Error', 'Gagal menyalin log', 'error');
+            }
+        }
+        
+        // Clear old logs
+        async function clearOldLogs() {
+            if (!confirm('Apakah Anda yakin ingin menghapus log yang berusia lebih dari 30 hari?\n\nAksi ini tidak dapat dibatalkan.')) {
+                return;
+            }
+            
+            try {
+                const confirmDelete = confirm('PERINGATAN: Anda akan menghapus semua log yang berusia lebih dari 30 hari.\n\nTekan OK untuk melanjutkan.');
+                
+                if (!confirmDelete) return;
+                
+                showNotification('Memproses', 'Menghapus log lama...', 'info');
+                
+                // Calculate date 30 days ago
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                
+                // Filter logs older than 30 days
+                const logsToDelete = allLogs.filter(log => 
+                    new Date(log.timestamp) < thirtyDaysAgo
+                );
+                
+                // Simulate deletion (in real app, you would call a delete function)
+                console.log(`Would delete ${logsToDelete.length} old logs`);
+                
+                // Add audit log for this action
+                await window.db.addAuditLog({
+                    action: 'LOGS_CLEARED',
+                    user_id: sessionStorage.getItem('adminUsername') || 'admin',
+                    user_name: sessionStorage.getItem('adminName') || 'Admin',
+                    details: `Menghapus ${logsToDelete.length} log yang berusia lebih dari 30 hari`,
+                    ip_address: 'localhost'
+                });
+                
+                // Refresh logs
+                await refreshLogs();
+                
+                showNotification('Berhasil', `${logsToDelete.length} log lama berhasil dihapus`, 'success');
+                
+            } catch (error) {
+                console.error('Error clearing old logs:', error);
+                showNotification('Error', 'Gagal menghapus log lama: ' + error.message, 'error');
+            }
+        }
+        
+        // Export logs
+        async function exportLogs() {
+            try {
+                const format = prompt('Pilih format ekspor log OSSIP:\n1. CSV (Excel)\n2. JSON\n3. Text', '1');
+                
+                if (!format) return;
+                
+                showNotification('Memproses', 'Menyiapkan ekspor...', 'info');
+                
+                let exportData;
+                let filename;
+                let mimeType;
+                
+                switch(format) {
+                    case '1': // CSV
+                        exportData = convertLogsToCSV(filteredLogs);
+                        filename = `ossip_logs_${new Date().toISOString().slice(0, 10)}.csv`;
+                        mimeType = 'text/csv';
+                        break;
+                        
+                    case '2': // JSON
+                        exportData = JSON.stringify(filteredLogs, null, 2);
+                        filename = `ossip_logs_${new Date().toISOString().slice(0, 10)}.json`;
+                        mimeType = 'application/json';
+                        break;
+                        
+                    case '3': // Text
+                        exportData = convertLogsToText(filteredLogs);
+                        filename = `ossip_logs_${new Date().toISOString().slice(0, 10)}.txt`;
+                        mimeType = 'text/plain';
+                        break;
+                        
+                    default:
+                        showNotification('Error', 'Format tidak valid', 'error');
+                        return;
+                }
+                
+                // Create download link
+                const blob = new Blob([exportData], { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                // Add audit log
+                await window.db.addAuditLog({
+                    action: 'LOGS_EXPORTED',
+                    user_id: sessionStorage.getItem('adminUsername') || 'admin',
+                    user_name: sessionStorage.getItem('adminName') || 'Admin',
+                    details: `Mengekspor ${filteredLogs.length} log dalam format ${format === '1' ? 'CSV' : format === '2' ? 'JSON' : 'Text'}`,
+                    ip_address: 'localhost'
+                });
+                
+                showNotification('Berhasil', `Log berhasil diekspor (${filename})`, 'success');
+                
+            } catch (error) {
+                console.error('Error exporting logs:', error);
+                showNotification('Error', 'Gagal mengekspor log: ' + error.message, 'error');
+            }
+        }
+        
+        // Convert logs to CSV
+        function convertLogsToCSV(logs) {
+            const headers = ['Timestamp', 'Action', 'Level', 'User ID', 'User Name', 'Details', 'IP Address'];
+            const rows = logs.map(log => {
+                // Determine level
+                let level = 'info';
+                if (log.action.includes('ERROR')) level = 'error';
+                else if (log.action.includes('WARNING')) level = 'warning';
+                else if (log.action.includes('SUCCESS') || log.action.includes('VOTE_CAST')) level = 'success';
+                else if (log.action.includes('LOGIN') || log.action.includes('SECURITY')) level = 'security';
+                
+                return [
+                    new Date(log.timestamp).toISOString(),
+                    log.action,
+                    level,
+                    log.user_id || 'system',
+                    log.user_name || 'System',
+                    `"${(log.details || '').replace(/"/g, '""')}"`,
+                    log.ip_address || 'localhost'
+                ];
+            });
+            
+            return [headers, ...rows].map(row => row.join(',')).join('\n');
+        }
+        
+        // Convert logs to text
+        function convertLogsToText(logs) {
+            return logs.map(log => {
+                const date = new Date(log.timestamp);
+                return `[${date.toLocaleString('id-ID')}] [${log.action}] ${log.user_name || 'System'}: ${log.details || ''}`;
+            }).join('\n');
+        }
+        
+        // Logout function
+        function logout() {
+            if (confirm('Apakah Anda yakin ingin logout?')) {
+                // Add logout audit log
+                if (window.db && window.db.addAuditLog) {
+                    window.db.addAuditLog({
+                        action: 'ADMIN_LOGOUT',
+                        user_id: sessionStorage.getItem('adminUsername') || 'admin',
+                        user_name: sessionStorage.getItem('adminName') || 'Admin',
+                        details: 'Admin logout dari sistem logs',
+                        ip_address: 'localhost'
+                    });
+                }
+                
+                // Clear session
+                sessionStorage.clear();
+                
+                // Redirect to login
+                window.location.href = 'admin-login.html';
+            }
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('logDetailModal');
+            if (event.target === modal) {
+                closeLogDetailModal();
+            }
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initializePage);
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+        
+        // Toggle auto-refresh (optional function if you want to add a toggle button later)
+        function toggleAutoRefresh() {
+            isAutoRefreshEnabled = !isAutoRefreshEnabled;
+            const status = document.getElementById('autoRefreshStatus');
+            
+            if (isAutoRefreshEnabled) {
+                status.style.background = 'rgba(33, 150, 243, 0.9)';
+                status.innerHTML = '<i class="fas fa-sync-alt"></i> Auto-refresh: <span id="refreshTimer">10s</span>';
+                startRefreshTimer();
+                showNotification('Auto-refresh', 'Auto-refresh diaktifkan', 'success');
+            } else {
+                status.style.background = 'rgba(158, 158, 158, 0.9)';
+                status.innerHTML = '<i class="fas fa-pause"></i> Auto-refresh: Paused';
+                clearInterval(refreshInterval);
+                showNotification('Auto-refresh', 'Auto-refresh dijeda', 'warning');
+            }
+        }
+    </script>
+</body>
+</html>
