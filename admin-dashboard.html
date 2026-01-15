@@ -1293,6 +1293,162 @@ window.addEventListener('beforeunload', function() {
         window.adminSyncReceiver.cleanup();
     }
 });
+
+async function loadDashboardData() {
+    console.log('📊 Loading dashboard data from ALL sources...');
+    
+    try {
+        // Method 1: Try to get from cloud sync
+        let cloudVotes = [];
+        if (window.syncService) {
+            cloudVotes = await window.syncService.getAllVotesForAdmin();
+        }
+        
+        // Method 2: Get from localStorage
+        const localVotes = JSON.parse(localStorage.getItem('votes') || '[]');
+        const teacherVotes = JSON.parse(localStorage.getItem('teacher_votes') || '[]');
+        const adminVotes = JSON.parse(localStorage.getItem('admin_votes') || '[]');
+        
+        // Method 3: Scan ALL localStorage keys for votes
+        const scannedVotes = scanAllLocalStorageForVotes();
+        
+        // Combine ALL votes
+        const allVotes = [
+            ...cloudVotes,
+            ...localVotes,
+            ...teacherVotes,
+            ...adminVotes,
+            ...scannedVotes
+        ];
+        
+        // Remove duplicates
+        const uniqueVotes = removeDuplicateVotes(allVotes);
+        
+        console.log(`📈 Total unique votes: ${uniqueVotes.length}`);
+        
+        // Update candidates with vote counts
+        const candidates = updateCandidateVotes(uniqueVotes);
+        
+        // Update UI
+        updateStatistics(candidates, uniqueVotes);
+        updateResultsTable(candidates);
+        updateVoteTimeline(uniqueVotes);
+        
+        // Save consolidated data
+        localStorage.setItem('consolidated_votes', JSON.stringify(uniqueVotes));
+        localStorage.setItem('consolidated_candidates', JSON.stringify(candidates));
+        
+        document.getElementById('lastUpdate').textContent = 
+            `Last update: ${new Date().toLocaleTimeString('id-ID')} (${uniqueVotes.length} votes)`;
+            
+    } catch (error) {
+        console.error('❌ Error loading dashboard data:', error);
+    }
+}
+
+// Helper function to scan ALL localStorage
+function scanAllLocalStorageForVotes() {
+    const allVotes = [];
+    const seen = new Set();
+    
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        
+        // Check if key might contain vote data
+        if (key.includes('vote') || 
+            key.includes('Vote') || 
+            key.includes('device_') || 
+            key.startsWith('20') || // Date-based keys
+            key.includes('sync') ||
+            key.includes('pending')) {
+            
+            try {
+                const value = localStorage.getItem(key);
+                const data = JSON.parse(value);
+                
+                if (Array.isArray(data)) {
+                    // Array of votes
+                    data.forEach(vote => {
+                        if (vote.voter_id || vote.voter_name) {
+                            const id = vote.timestamp + (vote.voter_id || vote.voter_name);
+                            if (!seen.has(id)) {
+                                seen.add(id);
+                                allVotes.push(vote);
+                            }
+                        }
+                    });
+                } else if (data && typeof data === 'object') {
+                    // Single vote object
+                    if (data.voter_id || data.voter_name) {
+                        const id = data.timestamp + (data.voter_id || data.voter_name);
+                        if (!seen.has(id)) {
+                            seen.add(id);
+                            allVotes.push(data);
+                        }
+                    }
+                }
+            } catch (e) {
+                // Not JSON or invalid, skip
+            }
+        }
+    }
+    
+    return allVotes;
+}
+
+// Remove duplicate votes
+function removeDuplicateVotes(votes) {
+    const unique = [];
+    const seen = new Set();
+    
+    votes.forEach(vote => {
+        const key = (vote.timestamp || '') + 
+                   (vote.voter_id || '') + 
+                   (vote.voter_name || '') + 
+                   (vote.ikhwan_candidate_id || '') + 
+                   (vote.akhwat_candidate_id || '');
+        
+        if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(vote);
+        }
+    });
+    
+    return unique;
+}
+
+// Update candidate votes
+function updateCandidateVotes(votes) {
+    let candidates = JSON.parse(localStorage.getItem('candidates') || '[]');
+    
+    if (candidates.length === 0) {
+        candidates = [
+            { id: 1, number: 1, gender: 'ikhwan', chairman_name: "MUHAMAD FADLAN ARFANI", chairman_class: "XI C", votes: 0 },
+            { id: 2, number: 2, gender: 'ikhwan', chairman_name: "PRAMUDITA AULADI", chairman_class: "XI C", votes: 0 },
+            { id: 3, number: 3, gender: 'ikhwan', chairman_name: "DARMA ALIF SAPUTRA", chairman_class: "XI D", votes: 0 },
+            { id: 4, number: 1, gender: 'akhwat', chairman_name: "AMRELINA", chairman_class: "XI B", votes: 0 },
+            { id: 5, number: 2, gender: 'akhwat', chairman_name: "KHOLIDAH IZZATI", chairman_class: "XI B", votes: 0 },
+            { id: 6, number: 3, gender: 'akhwat', chairman_name: "NAVA AISILA HASNA", chairman_class: "XI B", votes: 0 }
+        ];
+    }
+    
+    // Reset vote counts
+    candidates.forEach(c => c.votes = 0);
+    
+    // Count votes
+    votes.forEach(vote => {
+        if (vote.ikhwan_candidate_id) {
+            const candidate = candidates.find(c => c.id === vote.ikhwan_candidate_id);
+            if (candidate) candidate.votes = (candidate.votes || 0) + 1;
+        }
+        if (vote.akhwat_candidate_id) {
+            const candidate = candidates.find(c => c.id === vote.akhwat_candidate_id);
+            if (candidate) candidate.votes = (candidate.votes || 0) + 1;
+        }
+    });
+    
+    return candidates;
+}
     </script>
 </body>
 </html>

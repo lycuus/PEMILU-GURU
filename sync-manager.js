@@ -280,3 +280,8 @@ class SyncManager {
 
 // Global Sync Manager Instance
 window.syncManager = new SyncManager();
+
+// Ganti ini di sync-service.js:
+this.apiUrl = 'https://pemilu-guru-t4ud.vercel.app/api/sync-vote';
+// Atau untuk development:
+this.apiUrl = window.location.origin + '/api/sync-vote';

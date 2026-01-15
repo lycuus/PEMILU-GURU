@@ -2155,5 +2155,48 @@ function addSyncButton() {
 }
 </script>
     <script src="database.js"></script>
+
+    <!-- Load sync service -->
+<script src="sync-service.js"></script>
+
+<script>
+// In vote.html, MODIFIKASI fungsi submitVote:
+async function submitVote() {
+    // ... existing code ...
+    
+    // Setelah vote berhasil disimpan di localStorage:
+    const voteData = {
+        voter_id: currentUser.id,
+        voter_name: currentUser.name,
+        voter_class: currentUser.class,
+        ikhwan_candidate_id: selectedIkhwan,
+        akhwat_candidate_id: selectedAkhwat,
+        timestamp: new Date().toISOString()
+    };
+    
+    // 1. Save to local storage (existing)
+    const votes = JSON.parse(localStorage.getItem('votes') || '[]');
+    votes.push(voteData);
+    localStorage.setItem('votes', JSON.stringify(votes));
+    
+    // 2. SYNC TO CLOUD (NEW!)
+    if (window.syncService) {
+        await window.syncService.syncVote(voteData);
+    }
+    
+    // 3. Set multiple triggers for admin (redundancy)
+    localStorage.setItem('last_vote_timestamp', Date.now().toString());
+    localStorage.setItem('vote_update_' + Date.now(), JSON.stringify(voteData));
+    
+    // ... rest of existing code ...
+}
+
+// Initialize sync service when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.syncService) {
+        window.syncService.initialize();
+    }
+});
+</script>
 </body>
 </html>
