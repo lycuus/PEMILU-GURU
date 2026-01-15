@@ -2074,6 +2074,85 @@ async function loadCandidates() {
     // Mulai aplikasi
     startApplication();
 });
+
+// ============================================
+// SYNC INTEGRATION IN VOTE PAGE
+// ============================================
+
+// 1. Load Sync Manager
+if (typeof syncManager === 'undefined') {
+    const syncScript = document.createElement('script');
+    syncScript.src = 'sync-manager.js';
+    document.head.appendChild(syncScript);
+    
+    syncScript.onload = function() {
+        console.log("✅ Sync Manager loaded");
+        initializeSync();
+    };
+} else {
+    initializeSync();
+}
+
+function initializeSync() {
+    console.log("🔄 Initializing sync for voting page...");
+    
+    // 2. Start auto-sync
+    syncManager.startPollingSync();
+    
+    // 3. Sync on vote submission
+    window.addEventListener('voteSubmitted', function(event) {
+        console.log("🗳️ Vote submitted, triggering sync...");
+        
+        // Delay sedikit untuk memastikan data sudah disimpan
+        setTimeout(() => {
+            syncManager.triggerManualSync();
+        }, 1000);
+    });
+    
+    // 4. Sync on page load
+    setTimeout(() => {
+        syncManager.syncData();
+    }, 3000); // Sync 3 detik setelah page load
+    
+    // 5. Sync on page visibility change
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            console.log("📱 Page visible again, syncing...");
+            syncManager.syncData();
+        }
+    });
+    
+    // 6. Add sync button to UI (opsional)
+    addSyncButton();
+}
+
+function addSyncButton() {
+    // Tambah tombol sync di footer atau header
+    const syncBtn = document.createElement('button');
+    syncBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync';
+    syncBtn.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 50px;
+        cursor: pointer;
+        z-index: 999;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    `;
+    
+    syncBtn.addEventListener('click', function() {
+        syncManager.triggerManualSync();
+    });
+    
+    document.body.appendChild(syncBtn);
+}
 </script>
     <script src="database.js"></script>
 </body>

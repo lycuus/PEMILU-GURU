@@ -857,6 +857,442 @@
             }
         });
     });
+
+    // ============================================
+// ADMIN DASHBOARD SYNC RECEIVER
+// ============================================
+
+class AdminSyncReceiver {
+    constructor() {
+        this.lastUpdate = localStorage.getItem('last_admin_update') || '0';
+        this.syncCheckInterval = null;
+        this.isProcessing = false;
+    }
+    
+    // ============================================
+    // 1. INITIALIZE SYNC RECEIVER
+    // ============================================
+    initialize() {
+        console.log("📡 Admin sync receiver initializing...");
+        
+        // Start checking for updates
+        this.startSyncCheck();
+        
+        // Listen for BroadcastChannel messages
+        this.setupBroadcastListener();
+        
+        // Listen for localStorage changes
+        this.setupStorageListener();
+        
+        // Initial data load
+        this.checkForUpdates();
+    }
+    
+    // ============================================
+    // 2. START SYNC CHECK (EVERY 5 SECONDS)
+    // ============================================
+    startSyncCheck() {
+        console.log("🔄 Starting sync check (5 seconds)");
+        
+        this.syncCheckInterval = setInterval(() => {
+            this.checkForUpdates();
+        }, 5000); // Check every 5 seconds
+    }
+    
+    // ============================================
+    // 3. CHECK FOR UPDATES FROM VOTING DEVICES
+    // ============================================
+    async checkForUpdates() {
+        if (this.isProcessing) return;
+        
+        this.isProcessing = true;
+        
+        try {
+            // Check for sync triggers
+            const hasUpdate = await this.checkSyncTriggers();
+            
+            if (hasUpdate) {
+                console.log("🔄 Update detected, loading data...");
+                await this.loadSyncedData();
+                this.showUpdateNotification();
+            }
+            
+        } catch (error) {
+            console.error("❌ Update check failed:", error);
+        } finally {
+            this.isProcessing = false;
+        }
+    }
+    
+    // ============================================
+    // 4. CHECK SYNC TRIGGERS
+    // ============================================
+    async checkSyncTriggers() {
+        // Check admin update trigger
+        const adminTrigger = localStorage.getItem('admin_update_trigger');
+        if (adminTrigger) {
+            const trigger = JSON.parse(adminTrigger);
+            const triggerTime = parseInt(trigger.timestamp);
+            
+            if (triggerTime > parseInt(this.lastUpdate)) {
+                console.log("🎯 Admin update trigger found:", trigger);
+                this.lastUpdate = triggerTime.toString();
+                localStorage.setItem('last_admin_update', this.lastUpdate);
+                localStorage.removeItem('admin_update_trigger');
+                return true;
+            }
+        }
+        
+        // Check sync data from voting devices
+        const syncData = localStorage.getItem('admin_sync_data');
+        if (syncData) {
+            const data = JSON.parse(syncData);
+            const dataTime = new Date(data.timestamp).getTime();
+            
+            if (dataTime > parseInt(this.lastUpdate)) {
+                console.log("📊 Sync data found from device:", data.device_id);
+                this.lastUpdate = dataTime.toString();
+                return true;
+            }
+        }
+        
+        // Check IndexedDB for updates
+        const indexedDBUpdate = await this.checkIndexedDB();
+        if (indexedDBUpdate) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    // ============================================
+    // 5. LOAD SYNCED DATA
+    // ============================================
+    async loadSyncedData() {
+        try {
+            // Load from multiple sources
+            const allData = await this.loadAllDataSources();
+            
+            // Merge data
+            await this.mergeData(allData);
+            
+            // Refresh dashboard
+            if (typeof loadDashboardData === 'function') {
+                await loadDashboardData();
+            }
+            
+            console.log("✅ Synced data loaded and merged");
+            
+        } catch (error) {
+            console.error("❌ Failed to load synced data:", error);
+        }
+    }
+    
+    // ============================================
+    // 6. LOAD ALL DATA SOURCES
+    // ============================================
+    async loadAllDataSources() {
+        const dataSources = {
+            localStorage: {},
+            indexedDB: {},
+            syncStorage: {}
+        };
+        
+        // Source 1: localStorage
+        dataSources.localStorage = {
+            votes: JSON.parse(localStorage.getItem('votes') || '[]'),
+            teacher_votes: JSON.parse(localStorage.getItem('teacher_votes') || '[]'),
+            candidates: JSON.parse(localStorage.getItem('candidates') || '[]'),
+            voters: JSON.parse(localStorage.getItem('voters') || '[]'),
+            teachers: JSON.parse(localStorage.getItem('teachers') || '[]')
+        };
+        
+        // Source 2: Sync storage
+        const syncData = localStorage.getItem('admin_sync_data');
+        if (syncData) {
+            dataSources.syncStorage = JSON.parse(syncData);
+        }
+        
+        // Source 3: IndexedDB
+        dataSources.indexedDB = await this.loadFromIndexedDB();
+        
+        return dataSources;
+    }
+    
+    // ============================================
+    // 7. MERGE DATA FROM ALL SOURCES
+    // ============================================
+    async mergeData(dataSources) {
+        console.log("🔄 Merging data from multiple sources...");
+        
+        // Merge votes (remove duplicates)
+        const allVotes = [
+            ...dataSources.localStorage.votes,
+            ...(dataSources.syncStorage.votes || []),
+            ...(dataSources.indexedDB.votes || [])
+        ];
+        
+        const uniqueVotes = this.removeDuplicates(allVotes, 'timestamp', 'voter_id');
+        localStorage.setItem('votes', JSON.stringify(uniqueVotes));
+        
+        // Merge teacher votes
+        const allTeacherVotes = [
+            ...dataSources.localStorage.teacher_votes,
+            ...(dataSources.syncStorage.teacher_votes || []),
+            ...(dataSources.indexedDB.teacher_votes || [])
+        ];
+        
+        const uniqueTeacherVotes = this.removeDuplicates(allTeacherVotes, 'timestamp', 'username');
+        localStorage.setItem('teacher_votes', JSON.stringify(uniqueTeacherVotes));
+        
+        // Merge candidates (update vote counts)
+        const allCandidates = this.mergeCandidates(
+            dataSources.localStorage.candidates,
+            dataSources.syncStorage.candidates,
+            dataSources.indexedDB.candidates
+        );
+        
+        localStorage.setItem('candidates', JSON.stringify(allCandidates));
+        
+        console.log(`✅ Merged: ${uniqueVotes.length} votes, ${uniqueTeacherVotes.length} teacher votes`);
+    }
+    
+    // ============================================
+    // 8. REMOVE DUPLICATES
+    // ============================================
+    removeDuplicates(array, timestampKey, idKey) {
+        const seen = new Map();
+        const result = [];
+        
+        array.forEach(item => {
+            const key = `${item[timestampKey]}_${item[idKey]}`;
+            if (!seen.has(key)) {
+                seen.set(key, true);
+                result.push(item);
+            }
+        });
+        
+        return result;
+    }
+    
+    // ============================================
+    // 9. MERGE CANDIDATES
+    // ============================================
+    mergeCandidates(...candidateArrays) {
+        const candidateMap = new Map();
+        
+        candidateArrays.forEach(array => {
+            array.forEach(candidate => {
+                if (candidateMap.has(candidate.id)) {
+                    const existing = candidateMap.get(candidate.id);
+                    // Use highest vote count
+                    if ((candidate.votes || 0) > (existing.votes || 0)) {
+                        candidateMap.set(candidate.id, candidate);
+                    }
+                } else {
+                    candidateMap.set(candidate.id, candidate);
+                }
+            });
+        });
+        
+        return Array.from(candidateMap.values());
+    }
+    
+    // ============================================
+    // 10. LOAD FROM INDEXEDDB
+    // ============================================
+    async loadFromIndexedDB() {
+        if (!window.indexedDB) return {};
+        
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open('VoteSyncDB', 1);
+            
+            request.onsuccess = function(event) {
+                const db = event.target.result;
+                const transaction = db.transaction(['sync_data'], 'readonly');
+                const store = transaction.objectStore('sync_data');
+                const getAllRequest = store.getAll();
+                
+                getAllRequest.onsuccess = function() {
+                    const allData = getAllRequest.result;
+                    
+                    // Combine all sync data
+                    const combined = {
+                        votes: [],
+                        teacher_votes: [],
+                        candidates: []
+                    };
+                    
+                    allData.forEach(data => {
+                        if (data.votes) combined.votes.push(...data.votes);
+                        if (data.teacher_votes) combined.teacher_votes.push(...data.teacher_votes);
+                        if (data.candidates) combined.candidates.push(...data.candidates);
+                    });
+                    
+                    resolve(combined);
+                };
+                
+                getAllRequest.onerror = function(error) {
+                    console.error("❌ IndexedDB get error:", error);
+                    resolve({});
+                };
+            };
+            
+            request.onerror = function(error) {
+                console.error("❌ IndexedDB open error:", error);
+                resolve({});
+            };
+        });
+    }
+    
+    // ============================================
+    // 11. CHECK INDEXEDDB FOR UPDATES
+    // ============================================
+    async checkIndexedDB() {
+        if (!window.indexedDB) return false;
+        
+        try {
+            const data = await this.loadFromIndexedDB();
+            return data.votes.length > 0 || data.teacher_votes.length > 0;
+        } catch (error) {
+            return false;
+        }
+    }
+    
+    // ============================================
+    // 12. SETUP BROADCAST LISTENER
+    // ============================================
+    setupBroadcastListener() {
+        if ('BroadcastChannel' in window) {
+            const channel = new BroadcastChannel('vote_sync_channel');
+            
+            channel.onmessage = (event) => {
+                if (event.data.type === 'sync_data') {
+                    console.log("📡 Received broadcast sync data");
+                    this.processIncomingData(event.data.data);
+                }
+            };
+        }
+    }
+    
+    // ============================================
+    // 13. SETUP STORAGE LISTENER
+    // ============================================
+    setupStorageListener() {
+        window.addEventListener('storage', (event) => {
+            if (event.key === 'cross_tab_sync') {
+                try {
+                    const data = JSON.parse(event.newValue);
+                    if (data.type === 'sync_update') {
+                        console.log("📡 Received storage sync event");
+                        this.checkForUpdates();
+                    }
+                } catch (error) {
+                    // Ignore parse errors
+                }
+            }
+        });
+    }
+    
+    // ============================================
+    // 14. PROCESS INCOMING DATA
+    // ============================================
+    processIncomingData(data) {
+        // Save to localStorage
+        localStorage.setItem('admin_sync_data', JSON.stringify(data));
+        
+        // Update last update timestamp
+        this.lastUpdate = new Date(data.timestamp).getTime().toString();
+        localStorage.setItem('last_admin_update', this.lastUpdate);
+        
+        // Trigger data load
+        this.checkForUpdates();
+    }
+    
+    // ============================================
+    // 15. SHOW UPDATE NOTIFICATION
+    // ============================================
+    showUpdateNotification() {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #27ae60;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        `;
+        
+        notification.innerHTML = `
+            <i class="fas fa-bell"></i>
+            <div>
+                <strong>Data Terbaru Diterima!</strong>
+                <div style="font-size:12px;opacity:0.9;">Dari perangkat voting</div>
+            </div>
+            <i class="fas fa-times" style="margin-left:10px;font-size:12px;"></i>
+        `;
+        
+        // Close button
+        notification.querySelector('.fa-times').addEventListener('click', (e) => {
+            e.stopPropagation();
+            notification.remove();
+        });
+        
+        // Click to refresh
+        notification.addEventListener('click', () => {
+            if (typeof loadDashboardData === 'function') {
+                loadDashboardData();
+                notification.remove();
+            }
+        });
+        
+        document.body.appendChild(notification);
+        
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+    }
+    
+    // ============================================
+    // 16. CLEANUP
+    // ============================================
+    cleanup() {
+        if (this.syncCheckInterval) {
+            clearInterval(this.syncCheckInterval);
+        }
+    }
+}
+
+// ============================================
+// INITIALIZE ADMIN SYNC RECEIVER
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize after dashboard is loaded
+    setTimeout(() => {
+        window.adminSyncReceiver = new AdminSyncReceiver();
+        window.adminSyncReceiver.initialize();
+        
+        console.log("✅ Admin sync receiver ready");
+    }, 2000);
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    if (window.adminSyncReceiver) {
+        window.adminSyncReceiver.cleanup();
+    }
+});
     </script>
 </body>
 </html>

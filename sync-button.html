@@ -1,0 +1,65 @@
+<!-- Tambahkan ini di admin dashboard untuk kontrol manual -->
+<div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button id="manualSyncBtn" 
+                style="background: #3498db; color: white; border: none; 
+                       padding: 12px 15px; border-radius: 50px; cursor: pointer;
+                       display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+            <i class="fas fa-sync-alt"></i>
+            <span>Sync Now</span>
+        </button>
+        
+        <div id="syncStatus" 
+             style="background: rgba(0,0,0,0.7); color: white; padding: 8px 12px; 
+                    border-radius: 20px; font-size: 12px; text-align: center;">
+            Last sync: <span id="lastSyncTime">-</span>
+        </div>
+    </div>
+</div>
+
+<script>
+// Manual sync button for admin
+document.getElementById('manualSyncBtn').addEventListener('click', async function() {
+    const btn = this;
+    const originalHTML = btn.innerHTML;
+    
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+    btn.disabled = true;
+    
+    try {
+        // Trigger manual sync
+        if (window.adminSyncReceiver) {
+            await adminSyncReceiver.checkForUpdates();
+        }
+        
+        // Update status
+        document.getElementById('lastSyncTime').textContent = 
+            new Date().toLocaleTimeString('id-ID');
+            
+        // Show success
+        btn.innerHTML = '<i class="fas fa-check"></i> Synced!';
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+        }, 2000);
+        
+    } catch (error) {
+        console.error("❌ Manual sync failed:", error);
+        btn.innerHTML = '<i class="fas fa-times"></i> Failed';
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+        }, 2000);
+    }
+});
+
+// Update last sync time on load
+document.addEventListener('DOMContentLoaded', function() {
+    const lastSync = localStorage.getItem('last_admin_update');
+    if (lastSync) {
+        const time = new Date(parseInt(lastSync));
+        document.getElementById('lastSyncTime').textContent = 
+            time.toLocaleTimeString('id-ID');
+    }
+});
+</script>
