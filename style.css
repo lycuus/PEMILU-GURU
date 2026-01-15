@@ -2331,7 +2331,7 @@ html {
     font-size: 1.2rem;
 }
 
-.btn-admin-login {
+.btn-admin {
     width: 100%;
     padding: 18px;
     background-color: var(--accent-color);
